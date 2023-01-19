@@ -1,0 +1,247 @@
+---
+title: "project R"
+author: "Олеся Богомаз"
+date: "2022-12-21"
+output: html_document
+---
+
+
+```{r, message=FALSE}
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tibble)
+
+
+
+```
+
+
+```{r, message=FALSE}
+heart_attack<-read.csv('~/Heart_Attack_Data_Set.csv')
+heart_attack[(heart_attack$sex == 1), 'sex'] <- 'Male'
+heart_attack[(heart_attack$sex == 0), 'sex'] <- 'Female'
+d <- heart_attack%>%count(sex)
+```
+
+
+```{r sex_pie_chart}
+data <- 
+  arrange(d, desc(sex)) %>%
+  mutate(prop = n / sum(d$n) *100) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+
+
+
+ggplot(data, aes(x="", y=prop, fill=sex)) +
+  geom_bar(stat="identity", width=1, color="white") +
+  coord_polar("y", start=0) +
+  theme_void() + 
+  theme(legend.position="none") +
+  
+  geom_text(aes(y = ypos, label = sex), color = "white", size=6)
+```
+
+## Связан ли пол с инфарктами?
+
+Чтоб определить, влияет ли пол на наличие инфаркта в нашей выборке, используем точный тест Фишера и визуализуем мозаичным графиком
+
+```{r sex_vs_heart_attack}
+fisher <- table(heart_attack$sex, heart_attack$target)
+colnames(fisher) <- c('no disease', 'disease')
+
+mosaicplot(fisher, cex.axis=1.5, main =   "Mosaic plot: sex vs heart attack",  color = TRUE)
+fisher.test(fisher)
+```
+
+У женщин инфаркты чаще.
+
+
+## Чем может быть вызвано большее число инфарктов среди женщин?
+
+Посмотрим, какие параметры отличаются у женщин и мужчин
+
+Все наши переменные можно поделить на колличественные ('age', 'trestbps', 'chol', 'thalach', 'oldpeak') и категориальные (остальные).
+
+### Колличественные переменные
+
+Глянем на QQ плоты и тесты Шапиро-Уилка (раздельно по полам) чтоб понять, применим ли на каких-то категориальных тест Стьюдента
+```{r shapiro}
+ggplot(heart_attack, aes(sample = age, colour = sex))+ stat_qq() +
+  stat_qq_line()+theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: age', x = 'Theoretical Quantiles', y = 'Sample Quantiles',  )
+
+  
+
+shapiro.test(heart_attack[(heart_attack$sex == "Female"),'age'])
+shapiro.test(heart_attack[(heart_attack$sex == "Male"),'age'])
+
+ggplot(heart_attack, aes(sample = thalach, colour = sex))+ stat_qq() +
+  stat_qq_line()+theme_classic(base_size =15)+
+  theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: Greatest number of beats per minute', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+shapiro.test(heart_attack[(heart_attack$sex == "Female"),'thalach'])
+shapiro.test(heart_attack[(heart_attack$sex == "Male"),'thalach'])
+
+ggplot(heart_attack, aes(sample = oldpeak, colour = sex))+ stat_qq() +
+  stat_qq_line()+
+  theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: ST difference', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+shapiro.test(heart_attack[(heart_attack$sex == "Female"),'oldpeak'])
+shapiro.test(heart_attack[(heart_attack$sex == "Male"),'oldpeak'])
+
+ggplot(heart_attack, aes(sample = chol, colour = sex))+ stat_qq() +
+  stat_qq_line()+
+  theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: cholesterol', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+shapiro.test(heart_attack[(heart_attack$sex == "Female"),'chol'])
+shapiro.test(heart_attack[(heart_attack$sex == "Male"),'chol'])
+
+ggplot(heart_attack, aes(sample = trestbps, colour = sex))+ stat_qq() +
+  stat_qq_line()+theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: Resting Blood pressure', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+shapiro.test(heart_attack[(heart_attack$sex == "Female"),'trestbps'])
+shapiro.test(heart_attack[(heart_attack$sex == "Male"),'trestbps'])
+```
+
+Наблюдаем нормально распределенные данные только по возрасту, попробуем прологарифмировать. Не логарифмирую данные по ST депрессии (много нулей) и возрасту (данные и без логарифмирования нормальные).
+Кроме того, данные по давлению уж очень странные: не округляли ли их c переменным успехом? Нарисуем гистограммы до и после повторного округления.
+
+```{r round}
+hist(heart_attack[,'trestbps'], breaks=100, cex.axis=1.5,   cex.axis=1.5,   main =   'Resting Blood pressure' )
+hist(log(round(0.1*heart_attack[,'trestbps'])/0.1), breaks=100, cex.axis=1.5,   main =  'Resting Blood pressure')
+
+```
+
+
+Дальше округлим с точностью до 10 мм.рт.ст.
+
+```{r shapiro_after_changing}
+
+
+ggplot(heart_attack, aes(sample = log(thalach), colour = sex))+ stat_qq() +
+  stat_qq_line()+theme_classic(base_size =15)+
+  theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: Greatest number of beats per minute, log', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+shapiro.test(log(heart_attack[(heart_attack$sex == "Female"),'thalach']))
+shapiro.test(log(heart_attack[(heart_attack$sex == "Male"),'thalach']))
+
+
+ggplot(heart_attack, aes(sample = log(chol), colour = sex))+ stat_qq() +
+  stat_qq_line()+
+  theme_classic(base_size =22)+
+  labs(title = 'QQ Plot: cholesterol, log', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+
+shapiro.test(log(heart_attack[(heart_attack$sex == "Female"),'chol']))
+shapiro.test(log(heart_attack[(heart_attack$sex == "Male"),'chol']))
+
+
+ggplot(heart_attack, aes(sample = log(round(0.1*trestbps)/0.1), colour =sex))+ stat_qq() +
+  stat_qq_line()+theme_classic(base_size =15)+
+  labs(title = 'QQ Plot: Resting Blood pressure, log', x = 'Theoretical Quantiles', y = 'Sample Quantiles' )
+
+shapiro.test(log(round(0.1*heart_attack[(heart_attack$sex == "Female"),'trestbps'])/0.1))
+shapiro.test(log(round(0.1*heart_attack[(heart_attack$sex == "Male"),'trestbps'])/0.1))
+
+
+```
+
+Данные по холестерину в крови оказались распределены лог-нормально
+
+Применим тест Стьюдента на нормально распределенных величинах и тест Манна-Уитни на ненормально.
+
+```{r student_and_wilcox_test}
+t.test(heart_attack[(heart_attack$sex == "Female"),'age'],
+            heart_attack[(heart_attack$sex == "Male"),'age'], alternative = 'greater')
+ggplot(heart_attack, aes(sex, age)) + geom_boxplot(aes(fill=sex))+ theme_classic(base_size =15)+labs (title='Age by sex', x='')
+
+wilcox.test(heart_attack[(heart_attack$sex == "Female"),'thalach'],
+            heart_attack[(heart_attack$sex == "Male"),'thalach'], , alternative = 'greater')
+ggplot(heart_attack, aes(sex, thalach)) + geom_boxplot(aes(fill=sex))+ theme_classic(base_size =15)+labs (title='Greatest number of beats per minute by sex', x='')
+
+wilcox.test(heart_attack[(heart_attack$sex == "Female"),'oldpeak'],
+            heart_attack[(heart_attack$sex == "Male"),'oldpeak'], , alternative = 'greater')
+ggplot(heart_attack, aes(sex, oldpeak)) + geom_boxplot(aes(fill=sex))+ theme_classic(base_size =15)+labs (title='ST depression by sex', x='', y='ST depression induced by exercise relative to rest, mm')
+
+t.test(log(heart_attack[(heart_attack$sex == "Female"),'chol']),
+            log(heart_attack[(heart_attack$sex == "Male"),'chol']), , alternative = 'greater')
+
+ggplot(heart_attack, aes(sex, log(chol))) + geom_boxplot(aes(fill=sex))+ theme_classic(base_size =20)+labs (title='Cholesterol by sex', x='', y='log(serum cholesterol in mg/dL)')
+
+
+
+wilcox.test(round(0.1*heart_attack[(heart_attack$sex == "Female"),'trestbps'])/0.1,
+            round(0.1*heart_attack[(heart_attack$sex == "Male"),'trestbps'])/0.1)
+ggplot(heart_attack, aes(sex, round(0.1*trestbps)/0.1)) + geom_boxplot(aes(fill=sex))+ theme_classic(base_size =15)+labs (title='Resting Blood pressure by sex', x='', y='Resting Blood pressure, mmHg')
+
+
+```
+
+На уровне значимости 0,05 разница найдена только по холестерину.
+
+### Категориальные переменные
+Вспомним, что есть и категориальные признаки: боль в груди (4 варианта), повышен ли сахар в крови, данные ЭКГ, стенокрдия при нагрузке, наклон ST-пика на кардиограмме, количество крупных сосудов сердца, заполняемых кровью.
+Для признаков с двумя вариантами или нулевыми ячейками использую точный тест Фишера, в остальных случаях - критерий Пирсона.
+
+```{r fisher_and_chi_2}
+pain <- table(heart_attack$sex, heart_attack$cp)
+colnames(pain)<-c('typical angina' ,'atypical angina','non-anginal', 'no pain')
+mosaicplot(pain, color =TRUE)
+chisq.test(pain)
+
+blood_glucose <- table(heart_attack$sex, heart_attack$fbs)
+colnames(blood_glucose )<- c('normal', 'high')
+blood_glucose
+mosaicplot(blood_glucose, color =TRUE, cex.axis=1.5)
+fisher.test(blood_glucose)
+
+
+Rest_ECG <- table(heart_attack$sex, heart_attack$restecg)
+
+colnames( Rest_ECG)<- c('normal', 'abnormal ST', 'hypertrophy of LV')
+Rest_ECG
+mosaicplot(Rest_ECG,  color =TRUE)
+fisher.test(Rest_ECG)
+
+
+exercise_induced_angina <- table(heart_attack$sex, heart_attack$exang)
+
+colnames(exercise_induced_angina)<- c('yes', 'no')
+mosaicplot(exercise_induced_angina, color =TRUE,  cex.axis=1.5)
+fisher.test(exercise_induced_angina)
+
+slope_of_the_peak_exercise <- table(heart_attack$sex, heart_attack$slope)
+colnames(slope_of_the_peak_exercise) <- c('upsloping', 'flat', 'downsloping')
+mosaicplot(slope_of_the_peak_exercise, color =TRUE,cex.axis=1.5 )
+chisq.test(slope_of_the_peak_exercise)
+
+number_of_vessels_colored_by_fluoroscopy <- table(heart_attack$sex, heart_attack$ca)
+
+mosaicplot(number_of_vessels_colored_by_fluoroscopy, cex.axis=1.5,  color =TRUE)
+fisher.test(number_of_vessels_colored_by_fluoroscopy)
+```
+На уровне значимости 0.05 есть разница только по стенокардии при нагрузке
+
+## Поправка на множественное тестирование
+
+Я провела довольно много тестов, пора это учесть. Применим поправку Бенжамини-Хохберга
+
+```{r adjust} 
+p.adjust(c(0.04732, 0.2444,0.96,0.002811,0.2242,0.07779,0.4907,0.1633,0.0175,1.987969 ,0.7231,0.1091), method = 'BH')
+```
+На уровне значимости 5% осталось только различие по холестерину.
+
+
+
+## Выводы 
+
+1. Женщины чаще, чем мужчины, страдают инфарктом.
+2. Значимое различие по полам наблюдается только в количестве холестерина в крови.
+
